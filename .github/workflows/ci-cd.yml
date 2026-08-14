@@ -1,0 +1,145 @@
+name: CI/CD - Walmart DemandLens
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPOSITORY: walmart-demandlens
+  ECS_CLUSTER: walmart-demandlens
+  ECS_SERVICE: walmart-demandlens
+  CONTAINER_PORT: 8501
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+
+      - name: Compile
+        run: python -m compileall -q .
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Ruff
+        run: python -m ruff check .
+
+  deploy:
+    name: Build, push and deploy to ECS Express Mode
+    needs: test
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image metadata
+        id: image
+        shell: bash
+        run: |
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          IMAGE="$REGISTRY/${ECR_REPOSITORY}"
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push linux/amd64 image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}:${{ github.sha }}
+            ${{ steps.image.outputs.image }}:latest
+
+      - name: Resolve ECS Express service ARN
+        id: service
+        shell: bash
+        run: |
+          SERVICE_ARN=$(aws ecs list-services \
+            --cluster "$ECS_CLUSTER" \
+            --region "$AWS_REGION" \
+            --query "serviceArns[?contains(@, '/service/${ECS_CLUSTER}/${ECS_SERVICE}')][0]" \
+            --output text)
+
+          if [ -z "$SERVICE_ARN" ] || [ "$SERVICE_ARN" = "None" ]; then
+            echo "ECS Express service '$ECS_SERVICE' was not found in cluster '$ECS_CLUSTER'."
+            exit 1
+          fi
+
+          echo "service_arn=$SERVICE_ARN" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy image to ECS Express Mode
+        shell: bash
+        run: |
+          aws ecs update-express-gateway-service \
+            --service-arn "${{ steps.service.outputs.service_arn }}" \
+            --primary-container "image=${{ steps.image.outputs.image }}:${{ github.sha }},containerPort=${CONTAINER_PORT}" \
+            --region "$AWS_REGION" \
+            --monitor-resources DEPLOYMENT \
+            --monitor-mode TEXT-ONLY
+
+      - name: Verify ECS Express service
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            STATUS=$(aws ecs describe-express-gateway-service \
+              --service-arn "${{ steps.service.outputs.service_arn }}" \
+              --region "$AWS_REGION" \
+              --query 'service.status.statusCode' \
+              --output text 2>/dev/null || true)
+
+            echo "Express service status: $STATUS"
+
+            case "$STATUS" in
+              STEADY_STATE|ACTIVE|RUNNING|COMPLETED)
+                echo "Deployment reached a healthy service state."
+                exit 0
+                ;;
+              FAILED|ERROR|INACTIVE)
+                echo "Deployment failed with status: $STATUS"
+                exit 1
+                ;;
+            esac
+
+            sleep 20
+          done
+
+          echo "Timed out waiting for ECS Express deployment."
+          exit 1

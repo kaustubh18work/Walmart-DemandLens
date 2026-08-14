@@ -1,0 +1,35 @@
+{
+  "family": "walmart-demandlens",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::029006055867:role/service-role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "walmart-demandlens",
+      "image": "029006055867.dkr.ecr.ap-south-1.amazonaws.com/walmart-demandlens:2.0.0",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8501,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "TZ",
+          "value": "Asia/Kolkata"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/walmart-demandlens",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

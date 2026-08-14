@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "walmart-demandlens"
+version = "1.0.0"
+description = "End-to-end Walmart retail demand forecasting and decision intelligence platform"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+include = ["demandlens*"]
