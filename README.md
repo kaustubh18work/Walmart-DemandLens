@@ -44,6 +44,20 @@ The application:
 
 This is designed as a **Data Science / AI-ML Engineering portfolio project**, not as a generic CSV forecasting utility.
 
+### Engineering highlights
+
+- Modular forecasting architecture
+- Chronological backtesting to reduce time-series leakage
+- Automatic model selection using validation WMAE
+- Forecast uncertainty through prediction intervals
+- Reproducible PDF and CSV reporting
+- Dataset-independent automated tests
+- Docker-ready runtime
+- Ruff linting and compile checks
+- CI/CD-ready repository structure
+
+
+
 ---
 
 ## ⭐ Why this project stands out
@@ -190,28 +204,58 @@ PDF + CSV Reports
 
 ---
 
-# 📦 Bundled Walmart dataset
+# 📦 Dataset
 
-The application is intentionally Walmart-specific. It does **not** expose a generic upload / drag-and-drop forecasting workflow.
+Walmart DemandLens is designed around the **Walmart M5 Forecasting Accuracy** dataset.
 
-The repository contains the Walmart data required by the application under `data/` and `data/raw/`.
+The full M5 dataset is intentionally **not committed to this repository** because the raw files are large. This keeps the Git repository lightweight and suitable for GitHub and CI workflows.
 
-The captured application dataset profile shows:
+### Official dataset
 
-| Dataset property | Observed value |
-|---|---:|
-| Records | **421,570** |
-| Stores | **45** |
-| Departments | **81** |
-| Historical range | **2010-02-05 → 2012-10-26** |
-| Holiday weeks | **10** |
-| Data quality score | **99.7 / 100** |
-| Duplicate keys | **0** |
-| Missing cells | **0** |
+Download the dataset from the official Kaggle competition page:
 
-These values describe the bundled dataset displayed by the captured application and are not hard-coded as model performance guarantees.
+**[Walmart M5 Forecasting Accuracy — Kaggle](https://www.kaggle.com/competitions/m5-forecasting-accuracy/data)**
 
----
+### Required raw files
+
+Place the downloaded files under:
+
+```text
+data/raw/
+├── calendar.csv
+├── sell_prices.csv
+├── sales_train_validation.csv
+├── sales_train_evaluation.csv
+└── sample_submission.csv
+```
+
+DemandLens also expects these processed files:
+
+```text
+data/
+├── train.csv
+├── test.csv
+├── features.csv
+├── stores.csv
+└── raw/
+    ├── calendar.csv
+    ├── sell_prices.csv
+    ├── sales_train_validation.csv
+    ├── sales_train_evaluation.csv
+    └── sample_submission.csv
+```
+
+> **Important:** `data/` is excluded from Git through `.gitignore`. The full Walmart/M5 dataset should not be committed to this repository.
+
+### Test fixtures
+
+The automated test suite does **not** depend on the full dataset. Lightweight fixtures are stored under:
+
+```text
+tests/fixtures/walmart/
+```
+
+This allows CI and local tests to run without downloading hundreds of megabytes of data.
 
 # 🔬 Model comparison & backtesting
 
@@ -375,14 +419,15 @@ Walmart-DemandLens-Streamlit/
 ├── README.md
 ├── docs/
 │   └── screenshots/
-├── data/
-│   ├── train.csv
-│   ├── test.csv
-│   ├── features.csv
-│   ├── stores.csv
-│   └── raw/
-├── models/
-├── reports/
+├── tests/
+│   ├── conftest.py
+│   ├── fixtures/
+│   │   └── walmart/
+│   ├── test_forecasting.py
+│   ├── test_insights.py
+│   └── test_walmart.py
+├── docs/
+│   └── screenshots/
 └── demandlens/
     ├── core/
     ├── walmart/
@@ -422,15 +467,22 @@ Walmart-DemandLens-Streamlit/
 Python 3.12 is recommended.
 
 ```bash
-git clone <your-repository-url>
-cd Walmart-DemandLens-Streamlit
+git clone https://github.com/kaustubh18work/Walmart-DemandLens.git
+cd Walmart-DemandLens
 
 python3.12 -m venv .venv
 source .venv/bin/activate
 
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install -e .
 ```
+
+### Before running the full application
+
+Download the M5 dataset from the Kaggle link in the **Dataset** section and prepare the required files under `data/`.
+
+The automated tests use `tests/fixtures/walmart/`, so the full dataset is not required for testing.
 
 Run the application:
 
@@ -447,6 +499,26 @@ http://localhost:8501
 `MPLBACKEND=Agg` is used for safe non-GUI chart generation during report creation.
 
 ---
+
+# 🔄 Continuous Integration
+
+The repository is structured for automated quality checks on pushes and pull requests.
+
+```text
+Checkout
+   ↓
+Python 3.12
+   ↓
+Install dependencies
+   ↓
+Compile check
+   ↓
+Pytest
+   ↓
+Ruff
+```
+
+The CI test suite uses lightweight fixtures instead of the full M5 dataset. This keeps CI fast and prevents large data files from entering Git history.
 
 # 🐳 Docker
 
@@ -553,7 +625,9 @@ There is no in-app theme selector. The custom UI follows the system/browser appe
 
 # 📌 Portfolio positioning
 
-This project demonstrates practical skills across:
+Walmart DemandLens is intended to demonstrate an end-to-end **Data Science + ML Engineering + Product Engineering** workflow rather than a standalone notebook.
+
+It demonstrates practical skills across:
 
 **Data Science**
 
